@@ -3,10 +3,14 @@ const { z } = require("zod")
 const { zodToJsonSchema } = require("zod-to-json-schema")
 const puppeteer = require("puppeteer")
 
-const ai = new GoogleGenAI({
-    apiKey: process.env.GOOGLE_GENAI_API_KEY
-})
+const googleGenAiApiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY_SECRET
+let ai = null
 
+if (!googleGenAiApiKey) {
+    console.warn('⚠️ Gemini API key not found. AI endpoints will return 503, but server continues running.')
+} else {
+    ai = new GoogleGenAI({ apiKey: googleGenAiApiKey })
+}
 
 const interviewReportSchema = z.object({
     matchScore: z.number().describe("A score between 0 and 100 indicating how well the candidate's profile matches the job describe"),
@@ -33,7 +37,11 @@ const interviewReportSchema = z.object({
 })
 
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
-
+    if (!ai) {
+        const error = new Error('Gemini API key is not configured. Interview report generation is unavailable.')
+        error.statusCode = 503
+        throw error
+    }
 
     const prompt = `Generate an interview report for a candidate with the following details:
                         Resume: ${resume}
@@ -94,6 +102,12 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
                         The content should be ATS friendly, i.e. it should be easily parsable by ATS systems without losing important information.
                         The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
                     `
+
+    if (!ai) {
+        const error = new Error('Gemini API key is not configured. Resume PDF generation is unavailable.')
+        error.statusCode = 503
+        throw error
+    }
 
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
